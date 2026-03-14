@@ -1,0 +1,158 @@
+"""
+Jira LLM Automation – triage endpoint for Jira Automation "Send web request".
+
+Flow: Issue created → Jira Automation POSTs here → LLM generates internal note →
+      Automation adds internal comment from response.
+
+Contract:
+  - POST /jira/triage with JSON: issueKey, summary, description, priority, issueType, projectKey, reporter
+  - Response: { "comment": "<markdown>" }
+"""
+from __future__ import annotations
+
+import logging
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from openai import AsyncOpenAI
+from config import get_settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Jira LLM Triage",
+    description="AI first-pass analysis for Jira issues; used by Jira Automation to post internal notes.",
+    version="1.0.0",
+)
+
+
+# --- Request/Response models (match Jira Automation contract) ---
+
+class JiraTriageRequest(BaseModel):
+    issueKey: str = Field(..., description="Jira issue key, e.g. ENG-123")
+    summary: str = Field(..., description="Issue summary")
+    description: str | None = Field(None, description="Issue description")
+    priority: str | None = Field(None, description="e.g. High, Medium")
+    issueType: str | None = Field(None, description="e.g. Bug, Incident")
+    projectKey: str | None = Field(None, description="Project key")
+    reporter: str | None = Field(None, description="Reporter display name")
+
+
+class JiraTriageResponse(BaseModel):
+    comment: str = Field(..., description="Markdown text for the internal note")
+
+
+# --- Prompt template (TL;DR, Hypothesis, Immediate checks, Questions for reporter) ---
+
+SYSTEM_PROMPT = """You are an internal incident triage assistant for engineers only.
+Output only the internal note in Markdown. Do not add meta-commentary.
+Use exactly these four sections with the given headings. Be concise and safe; label uncertainty clearly."""
+
+USER_PROMPT_TEMPLATE = """Issue key: {issue_key}
+Project: {project_key}
+Type: {issue_type}
+Priority: {priority}
+Reporter: {reporter}
+
+Summary:
+{summary}
+
+Description:
+{description}
+
+Generate a concise internal note in Markdown with exactly these sections:
+
+**TL;DR**
+- One bullet with the most likely high-level cause or next step.
+
+**Hypothesis**
+- 2-4 bullets about likely root cause(s).
+
+**Immediate checks**
+- 2-5 bullets of concrete checks an engineer can do now.
+
+**Questions for reporter**
+- 2-4 bullets with clarifying questions.
+
+Avoid exposing sensitive data. Be explicit when unsure. Start with "AI first pass – please validate before following." as the first line."""
+
+
+def build_prompt(payload: JiraTriageRequest) -> str:
+    return USER_PROMPT_TEMPLATE.format(
+        issue_key=payload.issueKey,
+        project_key=payload.projectKey or "",
+        issue_type=payload.issueType or "",
+        priority=payload.priority or "",
+        reporter=payload.reporter or "",
+        summary=payload.summary or "",
+        description=payload.description or "(no description)",
+    )
+
+
+async def call_llm(prompt: str) -> str:
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="LLM not configured (OPENAI_API_KEY missing)",
+        )
+    client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base if settings.openai_api_base else None,
+    )
+    response = await client.chat.completions.create(
+        model=settings.openai_model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=1024,
+    )
+    text = response.choices[0].message.content
+    if not text:
+        raise HTTPException(status_code=502, detail="LLM returned empty response")
+    return text.strip()
+
+
+def verify_bearer(authorization: str | None) -> None:
+    settings = get_settings()
+    if not settings.jira_triage_token:
+        logger.warning("JIRA_TRIAGE_TOKEN not set; accepting any request (dev only)")
+        return
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=403, detail="Missing or invalid Authorization header")
+    token = authorization[7:].strip()
+    if token != settings.jira_triage_token:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+
+@app.post("/jira/triage", response_model=JiraTriageResponse)
+async def jira_triage(
+    payload: JiraTriageRequest,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    """Accept issue data from Jira Automation, call LLM, return comment for internal note."""
+    verify_bearer(authorization)
+    logger.info("Triage request for issue %s", payload.issueKey)
+
+    try:
+        prompt = build_prompt(payload)
+        comment_text = await call_llm(prompt)
+        return JiraTriageResponse(comment=comment_text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Triage failed for %s", payload.issueKey)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Triage failed", "comment": "AI first pass could not be generated. Please triage manually."},
+        )
+
+
+@app.get("/health")
+async def health():
+    """Health check for deployments."""
+    return {"status": "ok"}
