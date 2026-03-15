@@ -2,7 +2,7 @@
 
 Team-owned **Jira → LLM → comment** flow: when an issue is created, an AI takes a first look and posts a **comment** with TL;DR, Hypothesis, Immediate checks, and Questions for reporter.
 
-This uses **Jira Automation** (Send web request), not Jira webhooks. When a work item is created, an Automation rule sends the issue data to this service; the service calls the LLM and returns the comment text; the rule then adds that as a comment on the issue.
+This uses **Jira Automation** (Send web request). When a work item is created, an Automation rule sends the issue data to this service; the service calls the LLM and returns the comment text; the rule then adds that as a comment on the issue.
 
 ## Flow
 
