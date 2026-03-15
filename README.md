@@ -77,6 +77,24 @@ uvicorn main:app --reload --port 8000
 - **Request**: JSON body with `issueKey`, `summary`, `description`, `priority`, `issueType`, `projectKey`, `reporter` (all except `issueKey` and `summary` optional).
 - **Response**: `{ "comment": "<markdown string>" }` for the internal note.
 
+## Run triage for an existing issue (script)
+
+To fetch a Jira issue, run the LLM triage, and **post the hypothesis as a comment** (e.g. for [JLA-1](https://sanjayrane.atlassian.net/browse/JLA-1)):
+
+1. In `.env` set:
+   - `JIRA_BASE_URL=https://sanjayrane.atlassian.net`
+   - `JIRA_EMAIL` = your Atlassian account email
+   - `JIRA_API_TOKEN` = [Create an API token](https://id.atlassian.com/manage-profile/security/api-tokens)
+   - `OPENAI_API_KEY` = your OpenAI key
+
+2. Run:
+
+   ```bash
+   python triage_issue.py JLA-1
+   ```
+
+The script fetches the issue from Jira, generates the same TL;DR / Hypothesis / Immediate checks / Questions, and adds that as a comment on the issue.
+
 ## Deployment
 
 Run behind HTTPS (e.g. on a team server or cloud). Jira Automation must reach the `/jira/triage` URL. Example production run:

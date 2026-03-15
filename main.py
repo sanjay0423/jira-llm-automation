@@ -10,6 +10,7 @@ Contract:
 """
 from __future__ import annotations
 
+import json
 import logging
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -128,19 +129,35 @@ def verify_bearer(authorization: str | None) -> None:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
 
+def _sanitize_json_body(raw: bytes) -> JiraTriageRequest:
+    """Parse JSON from Jira, stripping invalid control chars that cause 422 (e.g. newlines in description)."""
+    text = raw.decode("utf-8", errors="replace")
+    sanitized = "".join(c if ord(c) >= 32 or c == " " else " " for c in text)
+    data = json.loads(sanitized)
+    return JiraTriageRequest(**data)
+
+
 @app.post("/jira/triage", response_model=JiraTriageResponse)
 async def jira_triage(
-    payload: JiraTriageRequest,
     request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
 ):
     """Accept issue data from Jira Automation, call LLM, return comment for internal note."""
     verify_bearer(authorization)
+    try:
+        body = await request.body()
+        payload = _sanitize_json_body(body)
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning("Invalid request body: %s", e)
+        raise HTTPException(status_code=422, detail="Invalid JSON or missing required fields")
     logger.info("Triage request for issue %s", payload.issueKey)
 
     try:
         prompt = build_prompt(payload)
         comment_text = await call_llm(prompt)
+        # Never return empty comment so Jira Automation "Add comment" does not fail
+        if not (comment_text and comment_text.strip()):
+            comment_text = "AI first pass could not be generated. Please triage manually."
         return JiraTriageResponse(comment=comment_text)
     except HTTPException:
         raise
