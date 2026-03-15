@@ -1,96 +1,100 @@
 # Jira LLM Automation – Stakeholder Overview
 
-**Use this doc with the [Git repo](https://github.com/sanjay0423/jira-llm-automation) as the source of truth when explaining the program to stakeholders.**
+This document supports discussions with stakeholders using the [Git repository](https://github.com/sanjay0423/jira-llm-automation) as the single source of truth for the program.
 
 ---
 
-## 1. What it does (elevator pitch)
+## 1. Purpose and value
 
-When someone creates a Jira issue, an AI **automatically** adds a first-pass triage comment on the same issue with:
+When a Jira work item is created, an AI-generated first-pass triage comment is added automatically to that item. The comment includes:
 
-- **TL;DR** – one-line summary of likely cause or next step  
-- **Hypothesis** – possible root causes  
-- **Immediate checks** – concrete steps engineers can do now  
-- **Questions for reporter** – clarifying questions  
+- **TL;DR** – One-line summary of likely cause or recommended next step  
+- **Hypothesis** – Possible root causes  
+- **Immediate checks** – Concrete steps engineers can take immediately  
+- **Questions for reporter** – Clarifying questions to improve the ticket  
 
-No manual run required; it’s triggered by Jira the moment the issue is created. The goal is **faster triage and better consistency** for engineering (and related) teams.
+No manual step is required; Jira triggers the flow at creation time. The program aims to **shorten time-to-triage** and **standardize** first-pass analysis across engineering and related teams.
 
 ---
 
 ## 2. High-level flow
 
 ```
-┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
-│  Someone        │     │  Our service         │     │  Jira           │
-│  creates a      │────▶│  (this repo)         │────▶│  adds the       │
-│  Jira issue     │     │  LLM → hypothesis    │     │  AI comment     │
-└─────────────────┘     └──────────────────────┘     └─────────────────┘
-        │                           │
-        │  Jira Automation          │  Returns one
-        │  sends issue data         │  comment (text)
-        │  (summary, description…)   │
-        └───────────────────────────┘
+┌─────────────────────┐     ┌──────────────────────────┐     ┌─────────────────────┐
+│  Work item created  │     │  Triage service          │     │  Jira                │
+│  in Jira            │────▶│  (this repository)       │────▶│  adds AI comment    │
+│                     │     │  LLM → hypothesis text   │     │  to the work item   │
+└─────────────────────┘     └──────────────────────────┘     └─────────────────────┘
+         │                                    │
+         │  Jira Automation                   │  Returns a single
+         │  (Send web request)                 │  comment string
+         │  sends issue data                   │
+         └────────────────────────────────────┘
 ```
 
-- **Jira** = source of issues and where the comment appears.  
-- **This repo** = the service that receives issue data, calls the LLM, and returns the comment text.  
-- **Git** = single source of truth for how that service is built and run.
+- **Jira** – Source of work items and the surface where the comment appears.  
+- **Triage service** – Application that receives issue data, calls the LLM, and returns the comment text. Implemented in this repository.  
+- **Integration** – Implemented via **Jira Automation** (Send web request), not Jira webhooks. The Automation rule invokes the service and then adds the returned text as a comment.
 
 ---
 
-## 3. Repo as source of truth – what each part is for
+## 3. Repository as source of truth
 
-Walk through the repo with stakeholders using this map. Everything that “is” the program lives here.
+The following table maps each significant file or folder to its role. All program logic and documentation reside in this repository.
 
-| File / folder | Purpose (for stakeholders) |
-|---------------|----------------------------|
-| **README.md** | Entry point: what the project does, how to run it, and how to wire Jira (quick start, env vars, rule summary). |
-| **main.py** | Core application: HTTP endpoint Jira calls, prompt sent to the LLM, call to OpenAI (or compatible API), and response back to Jira. Defines the “contract” (what Jira sends, what we return). |
-| **config.py** | Configuration from environment: secrets (tokens, API keys), model name, Jira base URL. No secrets in code; they’re in env / `.env`. |
-| **triage_issue.py** | Optional script: “run triage for one issue now” (e.g. for an existing ticket). Fetches the issue from Jira, runs the same LLM logic, posts the comment via Jira API. Good for one-off use or testing. |
-| **requirements.txt** | List of Python dependencies (FastAPI, OpenAI client, etc.). Ensures everyone runs the same stack. |
-| **.env.example** | Template for environment variables (tokens, API keys, Jira URL). Copy to `.env` and fill in; actual `.env` is not in Git (security). |
-| **AUTOMATIC_TRIAGE.md** | Step-by-step: how to turn on “automatic” mode (issue created → Jira calls our service → comment added). Useful for ops or anyone setting up the rule. |
-| **JIRA_SETUP.md** | Detailed Jira-side setup: exposing the service (e.g. ngrok/deploy), creating the Automation rule, and testing. |
-| **STAKEHOLDER_OVERVIEW.md** | This document: narrative for explaining the program and using the repo as the single source of truth. |
+| File or folder | Purpose |
+|----------------|---------|
+| **README.md** | Entry point: project purpose, how to run the service, and how to configure the Jira Automation rule. Includes links to setup screenshots. |
+| **main.py** | Core application: HTTP endpoint invoked by Jira, prompt construction, LLM call (OpenAI or compatible API), and response returned to Jira. Defines the request/response contract. |
+| **config.py** | Configuration loaded from the environment: credentials (tokens, API keys), model name, Jira base URL. No secrets are stored in code; they are supplied via environment variables. |
+| **triage_issue.py** | Optional CLI: run triage for a single existing issue (fetch from Jira, run same LLM logic, post comment via Jira API). Used for one-off triage or testing. |
+| **requirements.txt** | Python dependencies (e.g. FastAPI, OpenAI client). Ensures a consistent runtime across environments. |
+| **.env.example** | Template for required environment variables. The actual `.env` file is not committed; it is created locally and listed in `.gitignore`. |
+| **docs/screenshots/** | Screenshots of the Jira Automation rule configuration (rule flow, Send web request, response variable). Referenced from the README. |
+| **AUTOMATIC_TRIAGE.md** | Step-by-step guide for enabling automatic triage (work item created → service invoked → comment added). |
+| **JIRA_SETUP.md** | Detailed Jira-side setup: exposing the service (e.g. ngrok or deployment), creating the Automation rule, and verifying behavior. |
+| **STAKEHOLDER_OVERVIEW.md** | This document: program summary and repository walkthrough for stakeholder discussions. |
 
-Nothing critical lives outside this repo; the “program” is what’s in Git plus the env/config you use when running it.
-
----
-
-## 4. How we run it (without going deep into code)
-
-- **Local / test:** Run the app on a laptop, expose it with a tunnel (e.g. ngrok). Jira Automation points to that URL. Good for demos and trying changes.  
-- **Production / “always on”:** Deploy the same repo to a host (e.g. Railway, Render, internal server). Set the same env vars there; point the Jira rule at the deployed URL.  
-
-The **same code and docs in Git** apply in both cases; only the URL and where env vars are set change.
+No critical logic or configuration lives outside this repository; the program is defined by the contents of the repo plus the environment configuration used at runtime.
 
 ---
 
-## 5. Security and ownership (talking points)
+## 4. Deployment and operation
 
-- **Secrets:** All secrets (Jira API token, OpenAI key, triage token) are in environment variables, not in the repo. `.env` is in `.gitignore`.  
-- **Who can trigger the service:** Only callers that send the correct `Authorization: Bearer <token>` (the triage token) are accepted. In production, only the Jira Automation rule (and anyone who knows that token) can trigger the endpoint.  
-- **Data:** Issue summary and description are sent to the LLM to generate the comment. No PII is required by the prompt; teams can set policies (e.g. redact or limit which projects use this).  
-- **Ownership:** The repo and this doc describe a team-owned, transparent solution: logic is in Git, behavior is documented, and changes are reviewable.
+- **Local or test** – The application is run on a developer machine and exposed via a tunnel (e.g. ngrok). The Jira Automation rule is pointed at that URL. Suitable for demos and iterative changes.  
+- **Production** – The same repository is deployed to a hosted environment (e.g. Railway, Render, or an internal server). The same environment variables are configured there, and the Jira Automation rule is updated to use the deployed URL.  
 
----
-
-## 6. Quick “show the repo” script for the meeting
-
-1. Open the repo (e.g. GitHub: `sanjay0423/jira-llm-automation`).  
-2. **README.md** – “This is what it does and how you run it.”  
-3. **main.py** – “This is the endpoint Jira calls and where the LLM is invoked; the contract is clear in code.”  
-4. **config.py** – “Configuration and secrets live in the environment, not in code.”  
-5. **triage_issue.py** – “Optional script to run triage on a single issue on demand.”  
-6. **AUTOMATIC_TRIAGE.md** / **JIRA_SETUP.md** – “How we connect Jira to this service and keep it as the source of truth for setup.”  
-7. **STAKEHOLDER_OVERVIEW.md** – “This document: we use the repo as the single source of truth to explain and run the program.”
+The same code and documentation apply in both cases; only the endpoint URL and the location of environment configuration differ.
 
 ---
 
-## 7. Summary for stakeholders
+## 5. Security and governance
 
-- **What:** Automatic AI first-pass triage comment on new Jira issues (TL;DR, hypothesis, checks, questions).  
-- **Where:** Logic and docs live in **this Git repo**; the repo is the **source of truth** for the program.  
-- **How:** Jira Automation calls our service when an issue is created; the service uses an LLM and returns the comment; Jira posts it.  
-- **Who:** Owned by the team; config and secrets in env; no “black box” – everything is in the repo and this overview.
+- **Secrets** – All sensitive values (Jira API token, OpenAI API key, triage authorization token) are provided via environment variables. The `.env` file is not committed.  
+- **Access control** – The triage endpoint accepts requests only when the caller sends the expected `Authorization: Bearer <token>`. In production, the Jira Automation rule is configured with this token; possession of the token implies permission to invoke the service.  
+- **Data** – Issue summary and description are sent to the LLM to generate the comment. The prompt does not require PII; teams may define policies (e.g. redaction or project-level eligibility) as needed.  
+- **Ownership and transparency** – The solution is team-owned. Logic, behavior, and setup are documented in the repository; changes are reviewable and traceable in version control.
+
+---
+
+## 6. Suggested repository walkthrough for meetings
+
+1. Open the repository (e.g. [github.com/sanjay0423/jira-llm-automation](https://github.com/sanjay0423/jira-llm-automation)).  
+2. **README.md** – Describes what the program does and how to run and connect Jira.  
+3. **main.py** – Shows the endpoint Jira calls and where the LLM is invoked; the contract is explicit in code.  
+4. **config.py** – Shows that configuration and secrets are read from the environment.  
+5. **triage_issue.py** – Optional script for on-demand triage of a single issue.  
+6. **docs/screenshots/** – Reference screenshots for the Jira Automation rule setup.  
+7. **AUTOMATIC_TRIAGE.md** / **JIRA_SETUP.md** – Step-by-step integration and setup.  
+8. **STAKEHOLDER_OVERVIEW.md** – This document; positions the repository as the source of truth for the program.
+
+---
+
+## 7. Summary
+
+| Aspect | Description |
+|--------|-------------|
+| **What** | Automatic, AI-generated first-pass triage comment on new Jira work items (TL;DR, hypothesis, immediate checks, questions for reporter). |
+| **Where** | Logic and documentation live in this Git repository; the repository is the source of truth. |
+| **How** | Jira Automation (Send web request) calls the triage service when a work item is created; the service calls the LLM and returns the comment; the Automation rule adds it to the work item. |
+| **Who** | Team-owned; configuration and secrets are environment-based; design and behavior are documented and reviewable in the repository. |

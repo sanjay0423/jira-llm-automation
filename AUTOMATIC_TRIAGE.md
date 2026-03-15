@@ -78,11 +78,11 @@ You’ll put the **same value** in the Jira Automation rule (step 3). This prove
    }
    ```
 
-   - Enable **“Wait for response”** (or “Delay rule until webhook response is received”).
+   - Enable **“Delay execution of subsequent rule actions until we've received a response for this web request”**.
 
-4. **Action 2 – Comment on issue**
-   - **Comment:** `{{webhookResponse.body.comment}}`  
-     (or `{{response.body.comment}}` if your Jira version uses that)
+4. **Action 2 – Add comment to work item**
+   - **Comment:** `{{webResponse.body.comment}}`  
+     (Jira Automation uses `webResponse` for the “Send web request” response; some UIs may show `response` or `webhookResponse`.)
 
 5. **Save** and turn the rule **On**.
 

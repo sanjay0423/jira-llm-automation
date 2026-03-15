@@ -1,8 +1,8 @@
 """
-Jira LLM Automation – triage endpoint for Jira Automation "Send web request".
+Jira LLM Automation – triage endpoint for Jira Automation (Send web request).
 
-Flow: Issue created → Jira Automation POSTs here → LLM generates internal note →
-      Automation adds internal comment from response.
+Flow: Work item created → Jira Automation POSTs here → LLM generates comment text →
+      Automation adds comment to work item from response. (Uses Automation, not webhooks.)
 
 Contract:
   - POST /jira/triage with JSON: issueKey, summary, description, priority, issueType, projectKey, reporter

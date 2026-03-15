@@ -65,13 +65,10 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
    }
    ```
 
-   - Turn **on** “Wait for response” / “Delay rule until the webhook response is received” so the next step can use the response.
+   - Turn **on** “Delay execution of subsequent rule actions until we've received a response for this web request” so the next step can use the response.
 
-6. **Action 2 – Comment on issue**
-   - Action: **Comment on issue** (in Jira Software this is a normal comment; the whole team will see it).
-   - **Comment** (body):  
-     `{{webhookResponse.body.comment}}`  
-     (or in some UIs: `{{response.body.comment}}`)
+6. **Action 2 – Add comment to work item**
+   - **Comment** (body): **`{{webResponse.body.comment}}`** (Jira Automation typically uses `webResponse`; some UIs show `response` or `webhookResponse`.)
 
 7. **Save** and enable the rule.
 
@@ -85,9 +82,9 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
 If nothing happens, check:
 
 - Automation rule is **enabled** and the trigger is **Issue created** for JLA.
-- **Send web request** uses the correct URL and **Wait for response** is on.
+- **Send web request** uses the correct URL and **Delay execution until response** is on.
 - Your service is running and reachable (no firewall blocking Jira).
-- **Comment** step uses `{{webhookResponse.body.comment}}` (or `{{response.body.comment}}`).
+- **Comment** step uses `{{webResponse.body.comment}}` (or the response variable name your Jira UI shows).
 - In your service logs: you should see a request for the new issue key.
 
 ---
@@ -98,5 +95,5 @@ If nothing happens, check:
 |------|----------------------|
 | 1 | Run the triage service and expose it (ngrok or deploy). |
 | 2 | In Jira Automation: **Issue created** → **Send web request** to `/jira/triage` with issue JSON, wait for response. |
-| 3 | **Comment on issue** with `{{webhookResponse.body.comment}}`. |
+| 3 | **Comment on issue** with `{{webResponse.body.comment}}`. |
 | 4 | Create an issue in JLA → LLM comment appears on the issue. |

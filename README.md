@@ -1,13 +1,15 @@
 # Jira LLM Automation
 
-Team-owned **Jira → LLM → internal note** flow: when an issue is created, an AI takes a first look and posts an **internal note** (agents only) with TL;DR, Hypothesis, Immediate checks, and Questions for reporter.
+Team-owned **Jira → LLM → comment** flow: when an issue is created, an AI takes a first look and posts a **comment** with TL;DR, Hypothesis, Immediate checks, and Questions for reporter.
+
+This uses **Jira Automation** (Send web request), not Jira webhooks. When a work item is created, an Automation rule sends the issue data to this service; the service calls the LLM and returns the comment text; the rule then adds that as a comment on the issue.
 
 ## Flow
 
-1. **Jira**: Issue created → Automation rule runs.
-2. **Action 1**: Send web request → `POST https://your-service/jira/triage` with issue data.
+1. **Jira**: Issue created → **Automation rule** runs (trigger: “Work item created”).
+2. **Action 1 – Send web request**: Jira sends `POST https://your-service/jira/triage` with issue data (and waits for the response).
 3. **This service**: Calls LLM (OpenAI or compatible), returns `{ "comment": "<markdown>" }`.
-4. **Action 2**: Add internal note with `{{webhookResponse.body.comment}}`.
+4. **Action 2 – Add comment to work item**: Jira posts the returned text using the response smart value (see below).
 
 ## Quick start
 
@@ -34,15 +36,16 @@ uvicorn main:app --reload --port 8000
 
 ### 3. Jira Automation rule
 
-1. **Trigger**: Issue created (JSM project).
-2. **Condition** (optional): e.g. Issue type = Incident OR Bug.
-3. **Action 1 – Send web request**
-   - URL: `https://your-deployed-service/jira/triage`
-   - Method: `POST`
-   - Headers:
-     - `Content-Type: application/json`
-     - `Authorization: Bearer <your JIRA_TRIAGE_TOKEN>`
-   - Body (Custom data, JSON):
+This is an **Automation** rule (Jira settings → Automation → Global automation or project automation), not a webhook. Screenshots of the rule setup are in [docs/screenshots/](docs/screenshots/).
+
+1. **Trigger**: **Work item created** (optionally limit by project, e.g. JLA).
+2. **Action 1 – Send web request**
+   - **URL**: `https://your-deployed-service/jira/triage` (must include `/jira/triage`).
+   - **Method**: `POST`
+   - **Headers**:
+     - `Content-Type`: `application/json`
+     - `Authorization`: `Bearer <your JIRA_TRIAGE_TOKEN>` (the word “Bearer ” plus a space is required)
+   - **Body**: Custom data (JSON):
 
    ```json
    {
@@ -56,12 +59,18 @@ uvicorn main:app --reload --port 8000
    }
    ```
 
-   - Enable **Wait for response** so the next step can use the response.
+   - Enable **“Delay execution of subsequent rule actions until we've received a response for this web request”** so the next step can use the response.
 
-4. **Action 2 – Comment on issue**
-   - Choose **Add internal note** (not "Reply to customer").
-   - Comment body: `{{webhookResponse.body.comment}}`  
-     (or `{{response.body.comment}}` depending on your Jira version).
+3. **Action 2 – Add comment to work item**
+   - **Comment body**: Use the response smart value. In most Jira Cloud UIs this is **`{{webResponse.body.comment}}`** (not `webhookResponse`). If your rule builder shows a different name for the “Send web request” response, use that (e.g. `{{response.body.comment}}`).
+
+**Screenshots (from Jira Automation setup):**
+
+| Screenshot | Description |
+|------------|-------------|
+| [1-rule-flow-and-details.png](docs/screenshots/1-rule-flow-and-details.png) | Rule flow (When / Then / And) and rule details with scope set to Global. |
+| [2-send-web-request-config.png](docs/screenshots/2-send-web-request-config.png) | Send web request: URL, method, body (JSON with smart values), and headers. |
+| [3-send-web-request-response-values.png](docs/screenshots/3-send-web-request-response-values.png) | How to use the response: `{{webResponse.body.comment}}` for the comment step. |
 
 ## Environment variables
 
