@@ -32,26 +32,31 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
 
 ## 2. Create the Automation rule in Jira
 
-1. Open your project:  
-   [JLA backlog](https://sanjayrane.atlassian.net/jira/software/projects/JLA/boards/2/backlog)
+### Step 1: Open Automation and create the rule
 
-2. Go to **Project settings** (gear) → **Automation** (or **Jira settings** → **Automation** for a global rule).
+1. Open your project: [JLA backlog](https://sanjayrane.atlassian.net/jira/software/projects/JLA/boards/2/backlog).
+2. Go to **Project settings** (gear) → **Automation**, or **Jira settings** → **Automation** → **Global automation** for a site-wide rule.
+3. Click **Create rule**.
 
-3. **Create rule**.
+### Step 2: Set the trigger and see the rule flow
 
-4. **Trigger**
-   - Choose **Issue created**.
-   - Scope: limit to **Project = JLA** (or leave global if you want all projects).
+4. **Trigger:** Choose **Work item created** (Jira may show “Issue created” in some UIs). Optionally add a condition (e.g. Project = JLA).
+5. Add the two actions below so the rule looks like: **When** Work item created → **Then** Send web request → **And** Add comment to work item. Set **Scope** to Global (or your project) and save the rule name.
 
-5. **Action 1 – Send web request**
-   - **URL**: `https://YOUR-SERVICE-URL/jira/triage`  
-     (e.g. `https://abc123.ngrok.io/jira/triage` or `https://your-app.railway.app/jira/triage`)
-   - **Method**: `POST`
-   - **Headers**:
+![Rule flow and details: When / Then / And, Scope Global](docs/screenshots/1-rule-flow-and-details.png)
+
+### Step 3: Configure “Send web request”
+
+6. **Action 1 – Send web request.** Use these settings (see screenshot for where each field lives):
+
+   - **Web request URL**: `https://YOUR-SERVICE-URL/jira/triage`  
+     (e.g. `https://abc123.ngrok-free.dev/jira/triage` or your deployed URL; **must include `/jira/triage`**.)
+   - **HTTP method**: `POST`
+   - **Headers** (add both):
      - `Content-Type`: `application/json`
      - `Authorization`: `Bearer YOUR_JIRA_TRIAGE_TOKEN`  
-       (same value as in your `.env` as `JIRA_TRIAGE_TOKEN`)
-   - **Body**: choose **Custom data** / **JSON**, and paste:
+       (same value as in your `.env` as `JIRA_TRIAGE_TOKEN`; the word **Bearer** and a space are required.)
+   - **Web request body**: choose **Custom data**, then paste this JSON:
 
    ```json
    {
@@ -65,12 +70,17 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
    }
    ```
 
-   - Turn **on** “Delay execution of subsequent rule actions until we've received a response for this web request” so the next step can use the response.
+   - **Execution options:** Turn **on** “Delay execution of subsequent rule actions until we've received a response for this web request”.
 
-6. **Action 2 – Add comment to work item**
-   - **Comment** (body): **`{{webResponse.body.comment}}`** (Jira Automation typically uses `webResponse`; some UIs show `response` or `webhookResponse`.)
+![Send web request: URL, method, body, headers](docs/screenshots/2-send-web-request-config.png)
 
-7. **Save** and enable the rule.
+### Step 4: Configure “Add comment to work item” with the response
+
+7. **Action 2 – Add comment to work item.** In the comment body, use the **response** from the Send web request step. In Jira Cloud this is usually **`{{webResponse.body.comment}}`** (see screenshot for the exact smart value list).
+
+![How to use the web request response: webResponse.body.comment](docs/screenshots/3-send-web-request-response-values.png)
+
+8. **Save** and enable the rule.
 
 ---
 
@@ -81,7 +91,7 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
 
 If nothing happens, check:
 
-- Automation rule is **enabled** and the trigger is **Issue created** for JLA.
+- Automation rule is **enabled** and the trigger is **Work item created** (or “Issue created”) for JLA.
 - **Send web request** uses the correct URL and **Delay execution until response** is on.
 - Your service is running and reachable (no firewall blocking Jira).
 - **Comment** step uses `{{webResponse.body.comment}}` (or the response variable name your Jira UI shows).
@@ -93,7 +103,7 @@ If nothing happens, check:
 
 | Step | What you do |
 |------|----------------------|
-| 1 | Run the triage service and expose it (ngrok or deploy). |
-| 2 | In Jira Automation: **Issue created** → **Send web request** to `/jira/triage` with issue JSON, wait for response. |
-| 3 | **Comment on issue** with `{{webResponse.body.comment}}`. |
-| 4 | Create an issue in JLA → LLM comment appears on the issue. |
+| 1 | Run the triage service and expose it (ngrok or deploy). See [section 1](#1-expose-the-triage-service-jira-must-reach-it). |
+| 2 | In Jira Automation: **Work item created** → **Send web request** to `/jira/triage` with issue JSON; enable “Delay execution until response”. See [screenshots](docs/screenshots/) and [section 2](#2-create-the-automation-rule-in-jira). |
+| 3 | **Add comment to work item** with `{{webResponse.body.comment}}`. See screenshot 3 above. |
+| 4 | Create a work item in JLA → LLM comment appears on the item. |
