@@ -2,13 +2,13 @@
 
 Team-owned **Jira → LLM → comment** flow: when an issue is created, an AI takes a first look and posts a **comment** with TL;DR, Hypothesis, Immediate checks, and Questions for reporter.
 
-This uses **Jira Automation** (Send web request), not Jira webhooks. When a work item is created, an Automation rule sends the issue data to this service; the service calls the LLM and returns the comment text; the rule then adds that as a comment on the issue.
+This uses **Jira Automation** (Send web request), not Jira webhooks. When a work item is created, an Automation rule sends the issue data to this service; the service retrieves relevant internal knowledge with RAG, calls the LLM, and returns the comment text; the rule then adds that as a comment on the issue.
 
 ## Flow
 
 1. **Jira**: Issue created → **Automation rule** runs (trigger: “Work item created”).
 2. **Action 1 – Send web request**: Jira sends `POST https://your-service/jira/triage` with issue data (and waits for the response).
-3. **This service**: Calls LLM (OpenAI or compatible), returns `{ "comment": "<markdown>" }`.
+3. **This service**: Retrieves knowledge from configured docs/code sources, calls LLM (OpenAI or compatible), returns `{ "comment": "<markdown>" }`.
 4. **Action 2 – Add comment to work item**: Jira posts the returned text using the response smart value (see below).
 
 ## Quick start
@@ -80,6 +80,11 @@ This is an **Automation** rule (Jira settings → Automation → Global automati
 | `OPENAI_API_KEY` | Yes | OpenAI (or compatible) API key. |
 | `OPENAI_MODEL` | No | Model name (default: `gpt-4o-mini`). |
 | `OPENAI_API_BASE` | No | Override base URL (e.g. Azure OpenAI). |
+| `RAG_SOURCE_URLS` | No | Newline or comma separated knowledge URLs for RAG. If empty, the app uses a starter Apache Airflow source set. |
+| `RAG_TOP_K` | No | Number of retrieved snippets to include in the prompt (default: `4`). |
+| `RAG_MAX_SOURCE_CHARS` | No | Maximum characters fetched from a source (default: `24000`). |
+| `RAG_MAX_SNIPPET_CHARS` | No | Maximum characters included per snippet in the prompt (default: `600`). |
+| `RAG_TIMEOUT_SECONDS` | No | HTTP timeout for retrieval fetches (default: `10.0`). |
 
 ## API contract
 

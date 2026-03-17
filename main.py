@@ -1,8 +1,9 @@
 """
 Jira LLM Automation – triage endpoint for Jira Automation (Send web request).
 
-Flow: Work item created → Jira Automation POSTs here → LLM generates comment text →
-      Automation adds comment to work item from response. (Uses Automation, not webhooks.)
+Flow: Work item created → Jira Automation POSTs here → RAG retrieves internal
+context → LLM generates comment text → Automation adds comment to work item
+from response. (Uses Automation, not webhooks.)
 
 Contract:
   - POST /jira/triage with JSON: issueKey, summary, description, priority, issueType, projectKey, reporter
@@ -18,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from openai import AsyncOpenAI
 from config import get_settings
+from rag import IssueContext, KnowledgeSnippet, format_knowledge_snippets, retrieve_knowledge
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,6 +65,8 @@ Summary:
 Description:
 {description}
 
+{knowledge_block}
+
 Generate a concise internal note in Markdown with exactly these sections:
 
 **TL;DR**
@@ -77,10 +81,28 @@ Generate a concise internal note in Markdown with exactly these sections:
 **Questions for reporter**
 - 2-4 bullets with clarifying questions.
 
-Avoid exposing sensitive data. Be explicit when unsure. Start with "AI first pass – please validate before following." as the first line."""
+Avoid exposing sensitive data. Be explicit when unsure. Start with "AI first pass – please validate before following." as the first line.
+
+When relevant, use the retrieved internal context to ground the hypothesis and checks. If the retrieved context is weak or conflicting, mention that uncertainty."""
 
 
-def build_prompt(payload: JiraTriageRequest) -> str:
+def _to_issue_context(payload: JiraTriageRequest) -> IssueContext:
+    return IssueContext(
+        issue_key=payload.issueKey,
+        summary=payload.summary,
+        description=payload.description,
+        priority=payload.priority,
+        issue_type=payload.issueType,
+        project_key=payload.projectKey,
+        reporter=payload.reporter,
+    )
+
+
+def build_prompt(
+    payload: JiraTriageRequest,
+    knowledge_snippets: list[KnowledgeSnippet] | None = None,
+) -> str:
+    knowledge_block = format_knowledge_snippets(knowledge_snippets or [])
     return USER_PROMPT_TEMPLATE.format(
         issue_key=payload.issueKey,
         project_key=payload.projectKey or "",
@@ -89,6 +111,7 @@ def build_prompt(payload: JiraTriageRequest) -> str:
         reporter=payload.reporter or "",
         summary=payload.summary or "",
         description=payload.description or "(no description)",
+        knowledge_block=knowledge_block,
     )
 
 
@@ -153,7 +176,14 @@ async def jira_triage(
     logger.info("Triage request for issue %s", payload.issueKey)
 
     try:
-        prompt = build_prompt(payload)
+        snippets = []
+        try:
+            snippets = await retrieve_knowledge(_to_issue_context(payload))
+            if snippets:
+                logger.info("Retrieved %d knowledge snippets for %s", len(snippets), payload.issueKey)
+        except Exception as rag_exc:  # noqa: BLE001 - RAG should fail soft
+            logger.warning("RAG retrieval failed for %s: %s", payload.issueKey, rag_exc)
+        prompt = build_prompt(payload, snippets if snippets else None)
         comment_text = await call_llm(prompt)
         # Never return empty comment so Jira Automation "Add comment" does not fail
         if not (comment_text and comment_text.strip()):

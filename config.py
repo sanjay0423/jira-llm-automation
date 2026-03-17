@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_api_base: str | None = None  # e.g. Azure OpenAI endpoint
 
+    # RAG sources: newline or comma separated URLs.
+    # If empty, the service falls back to a small set of public Apache Airflow
+    # documentation and GitHub references.
+    rag_source_urls: str = ""
+    rag_top_k: int = 4
+    rag_max_source_chars: int = 24000
+    rag_max_snippet_chars: int = 600
+    rag_timeout_seconds: float = 10.0
+
 
 def get_settings() -> Settings:
     return Settings()

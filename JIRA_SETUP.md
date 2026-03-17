@@ -30,7 +30,31 @@ Deploy the app and set env vars `JIRA_TRIAGE_TOKEN`, `OPENAI_API_KEY`, `OPENAI_M
 
 ---
 
-## 2. Create the Automation rule in Jira
+## 2. (Recommended) Create a dedicated Jira user for AI comments
+
+By default, the Automation rule runs as the rule owner (e.g. you), so comments appear as “Sanjay Rane”. To have comments appear as a dedicated **AI/LLM user** (e.g. “AI Triage” or “ai-llm”):
+
+### 2.1 Create the user in Jira
+
+1. Go to **Jira settings** (gear) → **Users** (or **User management** in Atlassian admin).
+2. **Invite a user** (or create, depending on your plan):
+   - **Email:** Use a dedicated address (e.g. `ai-triage@yourdomain.com`) or a plus-address (e.g. `yourname+ai-llm@yourdomain.com`) if you prefer.
+   - **Display name:** e.g. **AI Triage** or **AI LLM** so it’s clear in the UI who posted the comment.
+3. Complete the invite. The user does not need to log in for Automation to run as them; the rule will use this identity when adding comments.
+
+### 2.2 Set that user as the rule’s Actor
+
+When you create or edit the Automation rule:
+
+1. Open **Rule details** (right panel or “Rule details” tab).
+2. Find **Actor (required)**.
+3. Change the actor from your user to the **AI Triage** (or **ai-llm**) user you created.
+
+All actions performed by the rule (including “Add comment to work item”) will then run as that user, so comments will show as coming from **AI Triage** (or whatever display name you set), not from you.
+
+---
+
+## 3. Create the Automation rule in Jira
 
 ### Step 1: Open Automation and create the rule
 
@@ -104,6 +128,7 @@ If nothing happens, check:
 | Step | What you do |
 |------|----------------------|
 | 1 | Run the triage service and expose it (ngrok or deploy). See [section 1](#1-expose-the-triage-service-jira-must-reach-it). |
-| 2 | In Jira Automation: **Work item created** → **Send web request** to `/jira/triage` with issue JSON; enable “Delay execution until response”. See [screenshots](docs/screenshots/) and [section 2](#2-create-the-automation-rule-in-jira). |
-| 3 | **Add comment to work item** with `{{webResponse.body.comment}}`. See screenshot 3 above. |
-| 4 | Create a work item in JLA → LLM comment appears on the item. |
+| 2 | (Optional) Create a dedicated Jira user (e.g. “AI Triage”) and set it as the rule **Actor** so comments appear from that user. See [section 2](#2-recommended-create-a-dedicated-jira-user-for-ai-comments). |
+| 3 | In Jira Automation: **Work item created** → **Send web request** to `/jira/triage` with issue JSON; enable “Delay execution until response”. See [screenshots](docs/screenshots/) and [section 3](#3-create-the-automation-rule-in-jira). |
+| 4 | **Add comment to work item** with `{{webResponse.body.comment}}`. See screenshot 3 above. |
+| 5 | Create a work item in JLA → comment appears from the rule’s Actor (you or the dedicated AI user). |
